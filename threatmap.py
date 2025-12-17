@@ -5,11 +5,13 @@ import pandas as pd
 from datetime import datetime
 import time
 import json
+from pathlib import Path
+import os
 
 # Page configuration
 st.set_page_config(
     page_title="Cyhawk Africa - Live Threat Map",
-    page_icon="🦅",
+    page_icon="assets/favicon.png",  # Using favicon from assets
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -27,8 +29,13 @@ st.markdown("""
     .logo-container {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 1.5rem;
         margin-bottom: 1rem;
+    }
+    .logo-image {
+        width: 80px;
+        height: 80px;
+        object-fit: contain;
     }
     .cyhawk-logo {
         font-size: 3rem;
@@ -37,6 +44,7 @@ st.markdown("""
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+        line-height: 1.2;
     }
     .threat-card {
         background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
@@ -77,6 +85,14 @@ st.markdown("""
         font-size: 0.75rem;
         margin: 0.25rem;
     }
+    .debug-info {
+        background: rgba(139, 92, 246, 0.1);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,6 +115,9 @@ COUNTRY_COORDS = {
     'PL': {'name': 'Poland', 'lat': 51.9194, 'lon': 19.1451},
     'UA': {'name': 'Ukraine', 'lat': 48.3794, 'lon': 31.1656},
     'IT': {'name': 'Italy', 'lat': 41.8719, 'lon': 12.5674},
+    'ES': {'name': 'Spain', 'lat': 40.4637, 'lon': -3.7492},
+    'TR': {'name': 'Turkey', 'lat': 38.9637, 'lon': 35.2433},
+    'ID': {'name': 'Indonesia', 'lat': -0.7893, 'lon': 113.9213},
     'Unknown': {'name': 'Unknown', 'lat': 0, 'lon': 0}
 }
 
@@ -107,6 +126,68 @@ def get_country_from_code(code):
     if not code:
         return COUNTRY_COORDS['Unknown']
     return COUNTRY_COORDS.get(code.upper(), COUNTRY_COORDS['Unknown'])
+
+# ===========================================
+# LOGO AND ASSET DETECTION
+# ===========================================
+
+def check_assets():
+    """Check for logo and favicon files and return their status"""
+    # Get current working directory
+    cwd = os.getcwd()
+    
+    # Possible logo paths
+    logo_paths = [
+        "assets/CyHawk-logo.png",
+        "./assets/CyHawk-logo.png",
+        "CyHawk-logo.png",
+        os.path.join(cwd, "assets", "CyHawk-logo.png")
+    ]
+    
+    # Possible favicon paths
+    favicon_paths = [
+        "assets/favicon.png",
+        "./assets/favicon.png",
+        "favicon.png",
+        os.path.join(cwd, "assets", "favicon.png")
+    ]
+    
+    # Check which files exist
+    logo_info = {
+        'exists': False,
+        'path': None,
+        'checked_paths': []
+    }
+    
+    favicon_info = {
+        'exists': False,
+        'path': None,
+        'checked_paths': []
+    }
+    
+    # Check logo paths
+    for path in logo_paths:
+        logo_info['checked_paths'].append(path)
+        if Path(path).exists():
+            logo_info['exists'] = True
+            logo_info['path'] = path
+            break
+    
+    # Check favicon paths
+    for path in favicon_paths:
+        favicon_info['checked_paths'].append(path)
+        if Path(path).exists():
+            favicon_info['exists'] = True
+            favicon_info['path'] = path
+            break
+    
+    return {
+        'cwd': cwd,
+        'logo': logo_info,
+        'favicon': favicon_info,
+        'files_in_cwd': list(Path(cwd).glob('*')),
+        'files_in_assets': list(Path(cwd, 'assets').glob('*')) if Path(cwd, 'assets').exists() else []
+    }
 
 # ===========================================
 # API INTEGRATION FUNCTIONS
@@ -222,7 +303,6 @@ def fetch_greynoise(api_key):
         return []
     
     try:
-        # Using a known malicious IP for demonstration
         response = requests.get(
             'https://api.greynoise.io/v3/community/8.8.8.8',
             headers={'key': api_key},
@@ -389,31 +469,107 @@ if 'total_attacks' not in st.session_state:
     st.session_state.total_attacks = 0
 if 'critical_count' not in st.session_state:
     st.session_state.critical_count = 0
+if 'show_debug' not in st.session_state:
+    st.session_state.show_debug = True  # Show debug by default on first load
 
 # ===========================================
 # MAIN APPLICATION
 # ===========================================
 
+# Check for assets
+asset_info = check_assets()
+
+# Debug information (collapsible)
+if st.session_state.show_debug:
+    with st.expander("🔍 Asset Debug Information", expanded=True):
+        st.markdown(f"""
+        <div class="debug-info">
+            <h4 style="color: #06b6d4; margin-bottom: 1rem;">📂 File System Information</h4>
+            
+            <p><strong>Current Working Directory:</strong><br/>
+            <code>{asset_info['cwd']}</code></p>
+            
+            <h5 style="color: #06b6d4; margin-top: 1rem;">🖼️ Logo Status</h5>
+            <p><strong>Found:</strong> {"✅ Yes" if asset_info['logo']['exists'] else "❌ No"}</p>
+            {f"<p><strong>Path:</strong> <code>{asset_info['logo']['path']}</code></p>" if asset_info['logo']['exists'] else ""}
+            <p><strong>Checked paths:</strong></p>
+            <ul style="font-size: 0.85rem;">
+                {''.join([f"<li><code>{path}</code> {'✅' if Path(path).exists() else '❌'}</li>" for path in asset_info['logo']['checked_paths']])}
+            </ul>
+            
+            <h5 style="color: #06b6d4; margin-top: 1rem;">🎯 Favicon Status</h5>
+            <p><strong>Found:</strong> {"✅ Yes" if asset_info['favicon']['exists'] else "❌ No"}</p>
+            {f"<p><strong>Path:</strong> <code>{asset_info['favicon']['path']}</code></p>" if asset_info['favicon']['exists'] else ""}
+            <p><strong>Checked paths:</strong></p>
+            <ul style="font-size: 0.85rem;">
+                {''.join([f"<li><code>{path}</code> {'✅' if Path(path).exists() else '❌'}</li>" for path in asset_info['favicon']['checked_paths']])}
+            </ul>
+            
+            <h5 style="color: #06b6d4; margin-top: 1rem;">📁 Files in Current Directory</h5>
+            <ul style="font-size: 0.85rem;">
+                {''.join([f"<li><code>{f.name}</code></li>" for f in asset_info['files_in_cwd'][:10]])}
+            </ul>
+            
+            {f'''<h5 style="color: #06b6d4; margin-top: 1rem;">📁 Files in Assets Directory</h5>
+            <ul style="font-size: 0.85rem;">
+                {''.join([f"<li><code>{f.name}</code></li>" for f in asset_info['files_in_assets']])}
+            </ul>''' if asset_info['files_in_assets'] else '<p style="color: #f97316;">⚠️ Assets directory not found</p>'}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Hide Debug Info"):
+            st.session_state.show_debug = False
+            st.rerun()
+
 # Header with Cyhawk Africa branding
-st.markdown("""
-<div class="main-header">
-    <div class="logo-container">
-        <div style="font-size: 4rem;">🦅</div>
+if asset_info['logo']['exists']:
+    # Use actual logo
+    st.markdown('<div class="main-header">', unsafe_allow_html=True)
+    col_logo, col_text = st.columns([1, 5])
+    with col_logo:
+        st.image(asset_info['logo']['path'], width=80)
+    with col_text:
+        st.markdown("""
         <div>
             <div class="cyhawk-logo">CYHAWK AFRICA</div>
             <div style="color: #06b6d4; font-size: 1.2rem; font-weight: 600;">Live Cyber Threat Intelligence Map</div>
         </div>
-    </div>
-    <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">
+        """, unsafe_allow_html=True)
+    st.markdown("""
+    <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-top: 1rem;">
         Real-time threat monitoring powered by global intelligence feeds
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+else:
+    # Fallback to emoji if logo not found
+    st.markdown("""
+    <div class="main-header">
+        <div class="logo-container">
+            <div style="font-size: 4rem;">🦅</div>
+            <div>
+                <div class="cyhawk-logo">CYHAWK AFRICA</div>
+                <div style="color: #06b6d4; font-size: 1.2rem; font-weight: 600;">Live Cyber Threat Intelligence Map</div>
+            </div>
+        </div>
+        <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">
+            Real-time threat monitoring powered by global intelligence feeds
+        </div>
+        <div style="color: #f97316; font-size: 0.85rem; margin-top: 0.5rem;">
+            ⚠️ Logo not found - check debug info above
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Sidebar configuration
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
     st.markdown("---")
+    
+    if not st.session_state.show_debug:
+        if st.button("Show Debug Info"):
+            st.session_state.show_debug = True
+            st.rerun()
     
     st.markdown("#### 🆓 Free APIs (Always Active)")
     st.success("✅ URLhaus - Malicious URLs")
